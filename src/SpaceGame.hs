@@ -11,8 +11,6 @@ width = 400
 height = 400
 w = fromIntegral width :: GLdouble
 h = fromIntegral height :: GLdouble
-planetCenterX = w / 2
-planetCenterY = h / 2
 
 getDataFileName :: FilePath -> IO FilePath
 getDataFileName = return
@@ -28,17 +26,18 @@ main = do
         ,(SpecialKey KeyLeft,  StillDown, moveBarToLeft)
         ,(Char 'q',            Press,     \_ _ -> funExit)
         ]-}
-  funInit winConfig gameMap [planet, spaceship] () (()) [] (return()) (Timer 30) []
+  funInit winConfig gameMap [planet, spaceship] () (()) [] (gameCycle) (Timer 30) []
 
 createPlanet :: GameObject ()
 createPlanet =
   let planetPic = Basic (Circle 20.0 1.0 0.0 0.0 Filled)
   in object "planet" planetPic False (w/2,h/2) (0,0) ()
 
+
 createSpaceship :: GameObject ()
 createSpaceship =
   let spaceshipPic = Basic (Circle 2.0 0.0 1.0 0.0 Filled)
-  in object "spaceship" spaceshipPic False (w/2 + 5.0,h/2) (0,1) ()
+  in object "spaceship" spaceshipPic False (w/2 + 75.0,h/2) (0,0.6) ()
 
 {-moveBarToRight :: Modifiers -> Position -> IOGame GameAttribute () () () ()
 moveBarToRight _ _ = do
@@ -61,13 +60,14 @@ moveBarToLeft _ _ = do
 gameCycle :: IOGame () () () () ()
 gameCycle = do
   spaceship <- findObject "spaceship" "spaceshipGroup"
-  (vx, vy) <- getGameObjectSpeed spaceship
+  planet <- findObject "planet" "planetGroup"
+  (vx, vy) <- getObjectSpeed spaceship
   (sx, sy) <- getObjectPosition spaceship
   (px, py) <- getObjectPosition planet
   let (dx, dy) = diff (px, py) (sx, sy)
   let r = distance (px, py) (sx, sy)
   let acceleration = (accelerationValue r) *** (ort (px, py) (sx, sy))
-  setObjectSpeed ((vx, vy) +++ acceleration) spaceship
+  setObjectSpeed ((vx , vy) +++ acceleration) spaceship
 
   {-col1 <- objectLeftMapCollision ball
   col2 <- objectRightMapCollision ball
