@@ -1,8 +1,10 @@
 module SpaceGame where
 
 import Graphics.UI.Fungen
+import Graphics.UI.Fungen.Objects
 import Graphics.Rendering.OpenGL (GLdouble)
 import Geometry
+import Control.Monad
 import Physics
 
 data GameAttribute = Score Int
@@ -12,32 +14,42 @@ height = 400
 w = fromIntegral width :: GLdouble
 h = fromIntegral height :: GLdouble
 
-getDataFileName :: FilePath -> IO FilePath
-getDataFileName = return
+nShips = 3
+
+planet = objectGroup "planetGroup" [createPlanet]
+
+spaceships1 = objectGroup "ships1" $
+                  map (\i -> createSpaceship ("spaceship1_" ++ (show i)) (Color 0.0 1.0 0.0) (w/2 + 50 + 5 * i, h/2))
+                      [1..nShips]
+
+spaceships2 = objectGroup "ships2" $
+                  map (\i -> createSpaceship ("spaceship2_" ++ (show i)) (Color 0.0 0.0 1.0) (w/2 - 50 - 5 * i, h/2 + 30))
+                      [1..nShips]
 
 main :: IO ()
 main = do
   let winConfig = ((100,80),(width,height),"Space game")
       gameMap = colorMap 0 0 0 w h
-      planet    = objectGroup "planetGroup" [createPlanet]
-      spaceship = objectGroup "spaceshipGroup" [createSpaceship]
       {-input = [
         (SpecialKey KeyRight, StillDown, moveBarToRight)
         ,(SpecialKey KeyLeft,  StillDown, moveBarToLeft)
         ,(Char 'q',            Press,     \_ _ -> funExit)
         ]-}
-  funInit winConfig gameMap [planet, spaceship] () (()) [] (gameCycle) (Timer 30) []
+  funInit winConfig gameMap [planet, spaceships1, spaceships2] () (()) [] (gameCycle) (Timer 30) []
 
 createPlanet :: GameObject ()
 createPlanet =
   let planetPic = Basic (Circle 20.0 1.0 0.0 0.0 Filled)
   in object "planet" planetPic False (w/2,h/2) (0,0) ()
 
+data Color = Color { red :: Float, green :: Float, blue :: Float }
+type Name = String
 
-createSpaceship :: GameObject ()
-createSpaceship =
-  let spaceshipPic = Basic (Circle 2.0 0.0 1.0 0.0 Filled)
-  in object "spaceship" spaceshipPic False (w/2 + 75.0,h/2) (0,0.6) ()
+createSpaceship :: Name -> Color -> Point -> GameObject ()
+createSpaceship name color pos =
+  let Color r g b = color in
+  let spaceshipPic = Basic (Circle 2.0 r g b Filled)
+  in object name spaceshipPic False pos (0, 1.0) ()
 
 {-moveBarToRight :: Modifiers -> Position -> IOGame GameAttribute () () () ()
 moveBarToRight _ _ = do
@@ -57,17 +69,22 @@ moveBarToLeft _ _ = do
     then (setObjectPosition ((pX - 5),pY) obj)
     else (setObjectPosition (sX/2,pY) obj)-}
 
+handleGravity :: (GameObject ()) -> IOGame () () () () ()
+handleGravity ship = do
+    planet <- findObject "planet" "planetGroup"
+    (px, py) <- getObjectPosition planet
+
+    (vx, vy) <- getObjectSpeed ship
+    (sx, sy) <- getObjectPosition ship
+    let (dx, dy) = diff (px, py) (sx, sy)
+    let r = distance (px, py) (sx, sy)
+    let acceleration = (accelerationValue r) *** (ort (px, py) (sx, sy))
+    setObjectSpeed ((vx , vy) +++ acceleration) ship
+
 gameCycle :: IOGame () () () () ()
 gameCycle = do
-  spaceship <- findObject "spaceship" "spaceshipGroup"
-  planet <- findObject "planet" "planetGroup"
-  (vx, vy) <- getObjectSpeed spaceship
-  (sx, sy) <- getObjectPosition spaceship
-  (px, py) <- getObjectPosition planet
-  let (dx, dy) = diff (px, py) (sx, sy)
-  let r = distance (px, py) (sx, sy)
-  let acceleration = (accelerationValue r) *** (ort (px, py) (sx, sy))
-  setObjectSpeed ((vx , vy) +++ acceleration) spaceship
+  let ships = getObjectManagerObjects spaceships1 ++ getObjectManagerObjects spaceships2
+  forM_ ships handleGravity
 
   {-col1 <- objectLeftMapCollision ball
   col2 <- objectRightMapCollision ball
