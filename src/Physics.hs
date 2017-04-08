@@ -6,7 +6,7 @@ type Distance = Double
 type Acceleration = Vector
 type Velocity = Vector
 
-gravity = 300.0
+gravity = 600.0
 
 accelerationValue :: Distance -> Double
 accelerationValue r = gravity / (max 10.0 (r * r))
