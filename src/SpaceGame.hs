@@ -16,60 +16,83 @@ h = fromIntegral height :: GLdouble
 
 nShips = 3
 
-planet = objectGroup "planetGroup" [createPlanet]
+planetManagerName = "planetGroup"
+spaceshipManagerNames = ["ships1", "ships2"]
 
-spaceships1 = objectGroup "ships1" $
-                  map (\i -> createSpaceship ("spaceship1_" ++ (show i)) (Color 0.0 1.0 0.0) (w/2 + 50 + 5 * i, h/2))
-                      [1..nShips]
-
-spaceships2 = objectGroup "ships2" $
-                  map (\i -> createSpaceship ("spaceship2_" ++ (show i)) (Color 0.0 0.0 1.0) (w/2 - 50 - 5 * i, h/2 + 30))
-                      [1..nShips]
+playerColors = [Color 0.0 1.0 0.0,
+                Color 0.0 0.0 1.0]
 
 main :: IO ()
 main = do
   let winConfig = ((100,80),(width,height),"Space game")
       gameMap = colorMap 0 0 0 w h
-      {-input = [
-        (SpecialKey KeyRight, StillDown, moveBarToRight)
-        ,(SpecialKey KeyLeft,  StillDown, moveBarToLeft)
-        ,(Char 'q',            Press,     \_ _ -> funExit)
-        ]-}
+      planet = objectGroup planetManagerName [createPlanet]
+      spaceships1 = objectGroup (spaceshipManagerNames !! 0) $
+                        map (\i -> createSpaceship 0 (Color 0.0 1.0 0.0) (w/2 + 50 + 5 * i, h/2))
+                            [1..nShips]
+      spaceships2 = objectGroup (spaceshipManagerNames !! 1) $
+                        map (\i -> createSpaceship 1 (Color 0.0 0.0 1.0) (w/2 - 50 - 5 * i, h/2 + 30))
+                            [1..nShips]
   funInit winConfig gameMap [planet, spaceships1, spaceships2] () (()) [] (gameCycle) (Timer 30) []
 
-createPlanet :: GameObject ()
+createPlanet :: GameObject ObjectAttributes
 createPlanet =
   let planetPic = Basic (Circle 20.0 1.0 0.0 0.0 Filled)
-  in object "planet" planetPic False (w/2,h/2) (0,0) ()
+  in object "planet" planetPic False (w/2,h/2) (0,0) NoAttributes
 
 data Color = Color { red :: Float, green :: Float, blue :: Float }
 type Name = String
 
-createSpaceship :: Name -> Color -> Point -> GameObject ()
-createSpaceship name color pos =
+data ObjectAttributes = NoAttributes |
+                        ShipAttributes { angle :: Double, ownerId :: Int }
+
+createSpaceship :: Int -> Color -> Point -> GameObject ObjectAttributes
+createSpaceship ownerId color pos =
   let Color r g b = color in
   let spaceshipPic = Basic (Circle 2.0 r g b Filled)
-  in object name spaceshipPic False pos (0, 1.0) ()
+  in object "" spaceshipPic False pos (0, 1.0) (ShipAttributes 0.0 ownerId)
 
-{-moveBarToRight :: Modifiers -> Position -> IOGame GameAttribute () () () ()
-moveBarToRight _ _ = do
-  obj     <- findObject "bar" "barGroup"
-  (pX,pY) <- getObjectPosition obj
-  (sX,_)  <- getObjectSize obj
-  if (pX + (sX/2) + 5 <= w)
-   then (setObjectPosition ((pX + 5),pY) obj)
-   else (setObjectPosition ((w - (sX/2)),pY) obj)
+_triangleSpread = pi / 8
+_triangleRadius = 5
 
-moveBarToLeft :: Modifiers -> Position -> IOGame GameAttribute () () () ()
-moveBarToLeft _ _ = do
-  obj <- findObject "bar" "barGroup"
-  (pX,pY) <- getObjectPosition obj
-  (sX,_)  <- getObjectSize obj
-  if (pX - (sX/2) - 5 >= 0)
-    then (setObjectPosition ((pX - 5),pY) obj)
-    else (setObjectPosition (sX/2,pY) obj)-}
+shipTriangle :: Vector -> Double -> [Point2D]
+shipTriangle (vx, vy) angle =
+    let vangle = atan (vy / vx) + (if signum vx == -1 then pi else 0)
+        noseAngle = vangle + angle
+        angles = [noseAngle, noseAngle + pi - _triangleSpread, noseAngle + pi + _triangleSpread]
+    in map (\a -> (((cos a) * _triangleRadius), (sin a) * _triangleRadius)) angles
 
-handleGravity :: (GameObject ()) -> IOGame () () () () ()
+shipPoly :: Vector -> Double -> Int -> ObjectPicture
+shipPoly speed angle ownerId =
+    let Color r g b = playerColors !! ownerId in
+    Basic $ Polyg (shipTriangle speed angle) r g b Filled
+
+updateShipPictures :: IOGame () ObjectAttributes () () ()
+updateShipPictures = do
+    managers <- getObjectManagers
+    newManagers <- forM spaceshipManagerNames (\managerName -> do
+        let manager = searchObjectManager managerName managers
+        let objects = getObjectManagerObjects manager
+        newObjects <- forM objects (\o -> do
+            name <- getObjectName o
+            position <- getObjectPosition o
+            speed <- getObjectSpeed o
+            a@(ShipAttributes angle ownerId) <- getObjectAttribute o
+            return $ object name (shipPoly speed angle ownerId) False position speed a
+         )
+        return $ objectGroup managerName newObjects
+     )
+    planetGroup <- findObjectManager "planetGroup"
+    setObjectManagers (planetGroup:newManagers)
+
+performGravity :: IOGame () ObjectAttributes () () ()
+performGravity = forM_ spaceshipManagerNames (\managerName -> do
+        manager <- findObjectManager managerName
+        let ships = getObjectManagerObjects manager
+        forM_ ships handleGravity
+    )
+
+handleGravity :: (GameObject ObjectAttributes) -> IOGame () ObjectAttributes () () ()
 handleGravity ship = do
     planet <- findObject "planet" "planetGroup"
     (px, py) <- getObjectPosition planet
@@ -81,23 +104,7 @@ handleGravity ship = do
     let acceleration = (accelerationValue r) *** (ort (px, py) (sx, sy))
     setObjectSpeed ((vx , vy) +++ acceleration) ship
 
-gameCycle :: IOGame () () () () ()
+gameCycle :: IOGame () ObjectAttributes () () ()
 gameCycle = do
-  let ships = getObjectManagerObjects spaceships1 ++ getObjectManagerObjects spaceships2
-  forM_ ships handleGravity
-
-  {-col1 <- objectLeftMapCollision ball
-  col2 <- objectRightMapCollision ball
-  when (col1 || col2) (reverseXSpeed ball)
-  col3 <- objectTopMapCollision ball
-  when col3 (reverseYSpeed ball)
-  col4 <- objectBottomMapCollision ball
-  when col4 $ do
-    -- funExit
-    reverseYSpeed ball
-
-  bar <- findObject "bar" "barGroup"
-  col5 <- objectsCollision ball bar
-  let (_,vy) = getGameObjectSpeed ball
-  when (and [col5, vy < 0])  (do reverseYSpeed ball)-}
-
+  performGravity
+  updateShipPictures
