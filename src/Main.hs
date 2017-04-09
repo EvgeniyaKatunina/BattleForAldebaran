@@ -408,7 +408,7 @@ createExplosion playerId p (vx, vy) = do
         let (dvx, dvy) = (dv * cos angle, dv * sin angle)
         er <- randomDouble explosionRadius
         let Color r g b = playerColors !! playerId
-        return $ object ("explosion" ++ (show objectId)) (Basic (Circle er r g b Filled))
+        return $ object ("explosion" ++ show objectId) (Basic (Circle er r g b Filled))
                                         False p (vx + dvx, vy + dvy) (BulletAttributes explosionTime "")
     addObjectsToGroup objects debrisManagerName
 
