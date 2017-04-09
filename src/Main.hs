@@ -13,15 +13,21 @@ import Physics
 data Color = Color { red :: Float, green :: Float, blue :: Float }
 
 data Player = Player { currentShip :: Int }
-data GameAttribute = GameAttribute { players :: [Player], bulletId :: Int }
+data GamePhase = BeforeStart | Running | AfterEnd [Int] deriving Eq
+data GameAttribute = GameAttribute { phase :: GamePhase, players :: [Player], bulletId :: Int }
 
 data ObjectAttributes = NoAttributes |
                         ShipAttributes { angle :: Double, ownerId :: Int, shotCooldown :: Int } |
-                        BulletAttributes { lifetime :: Int, fromShipName :: [Char] }
+                        BulletAttributes { lifetime :: Int, fromShipName :: String }
 
 type SGame a = IOGame GameAttribute ObjectAttributes () () a
 
+gameName = "Battle for Aldebaran"
+
 nShips = 3
+
+gameMap = colorMap 0 0 0 w h
+winConfig = ((100,80),(width,height), gameName)
 
 playerColors = [Color 0.0 1.0 0.0,
                 Color 0.3 0.3 1.0]
@@ -43,6 +49,30 @@ planetGroup = objectGroup planetManagerName [planet]
 debrisManagerName = "debrisGroup"
 debrisGroup = objectGroup debrisManagerName []
 
+spaceships1 = objectGroup (spaceshipManagerNames !! 0) $
+                        map (\i -> createSpaceship 0 i (Color 0.0 1.0 0.0) (w/2 + w/3 + 10 * (fromIntegral i), h/2))
+                            [1..nShips]
+spaceships2 = objectGroup (spaceshipManagerNames !! 1) $
+                        map (\i -> createSpaceship 1 i (Color 0.0 0.0 1.0) (w/2 - w/3 - 10 * (fromIntegral i), h/2 + 30))
+                            [1..nShips]
+
+createGroups :: GameAttribute -> [ObjectManager ObjectAttributes]
+createGroups attr = case phase attr of
+    BeforeStart -> [planetGroup]
+    Running -> [planetGroup, bulletsGroup, debrisGroup, spaceships1, spaceships2]
+    AfterEnd _ -> [planetGroup]
+
+input = [(Char ' ', Press, startGame), (SpecialKey KeyF2, Press, exitGame)] ++
+        concatMap createInput (zip [0..] playerKeys) where
+              createInput (player, (r, l, u, n, s)) = [
+                (r, StillDown, rotateCurrentShip player (-0.1)),
+                (l, StillDown, rotateCurrentShip player 0.1),
+                (u, StillDown, accelerateCurrentShip player 0.04),
+                (n, Press, switchToNextShip player),
+                (s, Press, shoot player)]
+
+initialAttrs = GameAttribute BeforeStart (map (\_ -> Player 0) [0, 1]) 0
+
 planet :: GameObject ObjectAttributes
 planet =
   let planetPic = Basic (Circle planetRadius 1.0 0.0 0.0 Filled)
@@ -53,28 +83,32 @@ height = 600
 w = fromIntegral width :: GLdouble
 h = fromIntegral height :: GLdouble
 
-main :: IO ()
-main = do
-  let winConfig = ((100,80),(width,height),"Space game")
-      gameMap = colorMap 0 0 0 w h
-      spaceships1 = objectGroup (spaceshipManagerNames !! 0) $
-                        map (\i -> createSpaceship 0 i (Color 0.0 1.0 0.0) (w/2 + w/3 + 10 * (fromIntegral i), h/2))
-                            [1..nShips]
-      spaceships2 = objectGroup (spaceshipManagerNames !! 1) $
-                        map (\i -> createSpaceship 1 i (Color 0.0 0.0 1.0) (w/2 - w/3 - 10 * (fromIntegral i), h/2 + 30))
-                            [1..nShips]
-      input = concatMap createInput (zip [0..] playerKeys) where
-              createInput (player, (r, l, u, n, s)) = [
-                (r, StillDown, rotateCurrentShip player (-0.1)),
-                (l, StillDown, rotateCurrentShip player 0.1),
-                (u, StillDown, accelerateCurrentShip player 0.04),
-                (n, Press, switchToNextShip player),
-                (s, Press, shoot player)
-               ]
-      initialAttrs = GameAttribute (map (\_ -> Player 0) [0, 1]) 0
-  funInit winConfig gameMap [planetGroup, bulletsGroup, debrisGroup, spaceships1, spaceships2] () initialAttrs input (gameCycle) (Timer 30) []
+startGame :: Modifiers -> Position -> SGame ()
+startGame _ _ = do
+    attr <- getGameAttribute
+    case (phase attr) of
+        BeforeStart -> do
+            let a = attr { phase = Running }
+            setObjectManagers (createGroups a)
+            setGameAttribute $ a
+        AfterEnd _ -> do
+            let a = attr { phase = BeforeStart }
+            setObjectManagers (createGroups a)
+            setGameAttribute $ a
+        Running -> return ()
 
-_shotCooldown = 15 --todo revertm testing purposes
+exitGame :: Modifiers -> Position -> SGame ()
+exitGame _ _ = do
+    attr <- getGameAttribute
+    case (phase attr) of
+        BeforeStart -> funExit
+        AfterEnd _ -> funExit
+        Running -> endGame []
+
+main :: IO ()
+main = funInit winConfig gameMap (createGroups initialAttrs) () initialAttrs input (gameCycle) (Timer 20) []
+
+_shotCooldown = 15
 
 createSpaceship :: Int -> Int -> Color -> Point -> GameObject ObjectAttributes
 createSpaceship ownerId shipId color pos =
@@ -160,12 +194,15 @@ playerHasShipsInBound playerId = do
     shipsInBound <- filterM c $ getObjectManagerObjects manager
     return (not $ null $ shipsInBound)
 
+whenRunningGame :: SGame () -> SGame ()
+whenRunningGame m = getGameAttribute >>= \a -> when (phase a == Running) m where
+
 whenPlayerHasShips :: Int -> SGame () -> SGame ()
 whenPlayerHasShips playerId m = playerHasShips playerId >>= \b -> when b m
 
 rotateCurrentShip :: Int -> Double -> Modifiers -> Position -> SGame ()
 rotateCurrentShip playerId angleDiff modifiers position =
-    whenPlayerHasShips playerId $ getCurrentShip playerId >>= rotateShip angleDiff
+    whenRunningGame $ whenPlayerHasShips playerId $ getCurrentShip playerId >>= rotateShip angleDiff
 
 rotateShip :: Double -> (GameObject ObjectAttributes) -> SGame ()
 rotateShip angleDiff ship = do
@@ -173,7 +210,7 @@ rotateShip angleDiff ship = do
     setObjectAttribute (attr { angle = (angle attr) + angleDiff }) ship
 
 accelerateCurrentShip :: Int -> Double -> Modifiers -> Position -> SGame ()
-accelerateCurrentShip playerId speedDiff modifiers position = whenPlayerHasShips playerId $ do
+accelerateCurrentShip playerId speedDiff modifiers position = whenRunningGame $ whenPlayerHasShips playerId $ do
     ship <- getCurrentShip playerId
     ShipAttributes angle ownerId _ <- getObjectAttribute ship
     (vx, vy) <- getObjectSpeed ship
@@ -216,7 +253,7 @@ _shotLifetime = 250
 _shotSafeTime = 30
 
 shoot :: Int -> Modifiers -> Position -> SGame ()
-shoot playerId _ _ = whenPlayerHasShips playerId $ do
+shoot playerId _ _ = whenRunningGame $ whenPlayerHasShips playerId $ do
     currentShip <- getCurrentShip playerId
     p <- getObjectPosition currentShip
     (vx, vy) <- getObjectSpeed currentShip
@@ -350,11 +387,59 @@ handleHits = do
         hasHit <- (not . null) <$> concat <$> (sequence $ map check $ (debrisManagerName, -1):(zip spaceshipManagerNames [0..]))
         when hasHit $ destroyObject bullet
 
+endGame :: [Int] -> SGame ()
+endGame winnerIds = do
+    attr <- getGameAttribute
+    let a = attr { phase = AfterEnd winnerIds }
+    setObjectManagers $ createGroups a
+    setGameAttribute $ a
+
+checkEndGame :: SGame ()
+checkEndGame = do
+     let nameIds = (zip spaceshipManagerNames [0..])
+     winners <- filterM (\(_, i) -> playerHasShipsInBound i) nameIds
+     when (length winners < length nameIds) $ endGame (map snd winners)
+
 gameCycle :: SGame ()
 gameCycle = do
-  performGravity
-  updateShipPictures
-  handleCooldowns
-  handleHits
-  handleLifetimes
-  performPlanetCollision
+    attr <- getGameAttribute
+    case phase attr of
+      Running -> do
+          performGravity
+          updateShipPictures
+          handleCooldowns
+          handleHits
+          handleLifetimes
+          performPlanetCollision
+          checkEndGame
+      BeforeStart -> do
+          printLines ([gameName, ""] ++ gameIntro) Fixed9By15 17 (5, h - 17) (Color 1.0 0.0 0.0)
+          printLines controlsInfo Fixed9By15 (-17) (5, 17) (Color 1.0 0.0 0.0)
+      AfterEnd ids -> do
+          let winnerStr = case ids of [a] -> "P" ++ show (a + 1) ++ " is the winner"; _ -> "Draw"
+          printLines ["Game finished", winnerStr] Fixed9By15 17 (5, h - 17) (Color 1.0 0.0 0.0)
+          printLines restartInfo Fixed9By15 (-17) (5, 17) (Color 1.0 0.0 0.0)
+
+printLines :: [String] -> BitmapFont -> Double -> Point -> Color -> SGame ()
+printLines xs font lineHeight (px, py) (Color r g b) =
+    forM_ (zip (if lineHeight > 0 then xs else reverse xs) [0..]) $ \(l, n) -> do
+        printOnScreen l font (px, py - lineHeight * n) r g b
+
+gameIntro = ["Commander, destroy all enemy ships!",
+             "Avoid collision with the star or losing ships out of bounds"]
+
+controlsInfo = ["Controls for P1:",
+                "Left/Right - rotate ship",
+                "Up - accelerate",
+                "Down - shoot",
+                ". (dot) - select next ship",
+                "",
+                "Controls for P2:",
+                "A/D - rotate  ship",
+                "W - accelerate",
+                "S - shoot",
+                "Q - select next ship",
+                "",
+                "Press SPACE to start or F2 to exit game"]
+
+restartInfo = ["Press SPACE to return to title screen or F2 to exit"]
