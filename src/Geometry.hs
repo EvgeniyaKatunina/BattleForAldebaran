@@ -31,3 +31,8 @@ koeff *** vector = (getX vector * koeff, getY vector * koeff)
 (+++) :: Vector -> Vector -> Vector
 vectorA +++ vectorB = (getX vectorA + getX vectorB, getY vectorA + getY vectorB)
 
+noseAngle :: Vector -> Double -> Double
+noseAngle v angle = directionAngle v + angle
+
+directionAngle :: Vector -> Double
+directionAngle (vx, vy) = atan (vy / vx) + (if signum vx == -1 then pi else 0)
