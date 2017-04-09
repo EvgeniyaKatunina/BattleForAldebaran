@@ -65,9 +65,9 @@ spaceships2 n = objectGroup (spaceshipManagerNames !! 1) $
                             [1..n]
 
 createGroups :: GameAttribute -> [ObjectManager ObjectAttributes]
-createGroups attr = case _phase attr of
+createGroups attr = case attr^.phase of
     BeforeStart -> [planetGroup]
-    Running -> let n = _nShips attr in [planetGroup, bulletsGroup, debrisGroup, spaceships1 n, spaceships2 n]
+    Running -> let n = attr^.nShips in [planetGroup, bulletsGroup, debrisGroup, spaceships1 n, spaceships2 n]
     AfterEnd _ -> [planetGroup]
 
 input = [(Char ' ', Press, startGame), (SpecialKey KeyF2, Press, exitGame)] ++
@@ -96,7 +96,7 @@ h = fromIntegral height :: GLdouble
 startGame :: Modifiers -> Position -> SGame ()
 startGame _ _ = do
     attr <- getGameAttribute
-    case (_phase attr) of
+    case (attr^.phase) of
         BeforeStart -> do
             let a = phase .~ Running $ attr
             setObjectManagers $ createGroups a
@@ -110,7 +110,7 @@ startGame _ _ = do
 setNShips :: Int -> Modifiers -> Position -> SGame ()
 setNShips n _ _ = do
     attr <- getGameAttribute
-    case _phase attr of
+    case attr^.phase of
         BeforeStart -> do
             setGameAttribute $ nShips .~ n $ attr
         _ -> return ()
@@ -118,7 +118,7 @@ setNShips n _ _ = do
 exitGame :: Modifiers -> Position -> SGame ()
 exitGame _ _ = do
     attr <- getGameAttribute
-    case (_phase attr) of
+    case (attr^.phase) of
         BeforeStart -> funExit
         AfterEnd _ -> funExit
         Running -> endGame []
@@ -133,11 +133,11 @@ createSpaceship ownerId shipId color pos =
   let Color r g b = color
       speed = (0, case ownerId of 0 -> 1.4; 1 -> -1.4)
       angle = 0.0
-      spaceshipPic = shipPoly speed angle ownerId _triangleRadius False
+      spaceshipPic = shipPoly speed angle ownerId triangleRadius False
   in object ("ship" ++ (show ownerId) ++ (show shipId)) spaceshipPic False pos speed (ShipAttributes angle ownerId shotCooldownConst)
 
-_triangleSpread = pi / 4
-_triangleRadius = 8.0
+triangleSpread = pi / 4
+triangleRadius = 8.0
 
 noseAngle :: Vector -> Double -> Double
 noseAngle (vx, vy) angle =
@@ -147,7 +147,7 @@ noseAngle (vx, vy) angle =
 shipTriangle :: Vector -> Double -> Double -> [Point2D]
 shipTriangle (vx, vy) angle size =
     let nose = noseAngle (vx, vy) angle
-        angles = [nose, nose + pi - _triangleSpread, nose + pi + _triangleSpread]
+        angles = [nose, nose + pi - triangleSpread, nose + pi + triangleSpread]
     in map (\a -> (((cos a) * size), (sin a) * size)) angles
 
 shipPoly :: Vector -> Double -> Int -> Double -> Bool -> ObjectPicture
@@ -167,7 +167,7 @@ updateShipPictures = do
             position <- getObjectPosition o
             speed <- getObjectSpeed o
             a@(ShipAttributes angle ownerId _) <- getObjectAttribute o
-            return $ object name (shipPoly speed angle ownerId _triangleRadius (shipId == currentShipIndex)) False position speed a
+            return $ object name (shipPoly speed angle ownerId triangleRadius (shipId == currentShipIndex)) False position speed a
          )
         return $ objectGroup managerName newObjects
      )
@@ -181,7 +181,7 @@ replaceObjectGroup name m (x:xs) = if name == getObjectManagerName x then m:xxs 
 setCurrentShipIndex :: Int -> Int -> SGame ()
 setCurrentShipIndex playerId shipIndex = do
     attr <- getGameAttribute
-    let player = (_players attr) !! playerId
+    let player = (attr^.players) !! playerId
     setGameAttribute $ attr { _players = (_players attr) & element playerId .~ (player { _currentShip = shipIndex }) }
 
 getCurrentShipIndex :: Int -> SGame Int
@@ -214,7 +214,7 @@ playerHasShipsInBound playerId = do
     return (not $ null $ shipsInBound)
 
 whenRunningGame :: SGame () -> SGame ()
-whenRunningGame m = getGameAttribute >>= \a -> when (_phase a == Running) m where
+whenRunningGame m = getGameAttribute >>= \a -> when (a^.phase == Running) m where
 
 whenPlayerHasShips :: Int -> SGame () -> SGame ()
 whenPlayerHasShips playerId m = playerHasShips playerId >>= \b -> when b m
@@ -238,8 +238,8 @@ accelerateCurrentShip playerId speedDiff modifiers position = whenRunningGame $ 
     setObjectSpeed (vx + dvx, vy + dvy) ship
     
 isInBound :: Point -> Bool
-isInBound (px, py) = px >= -_triangleRadius && px <= w + _triangleRadius &&
-                     py >= -_triangleRadius && py <= h + _triangleRadius
+isInBound (px, py) = px >= -triangleRadius && px <= w + triangleRadius &&
+                     py >= -triangleRadius && py <= h + triangleRadius
 
 switchToNextShip :: Int -> Int -> Modifiers -> Position -> SGame ()
 switchToNextShip d playerId _ _ = switchToNextShip' d playerId
@@ -251,7 +251,7 @@ switchToNextShip' d playerId = do
         next = do
             currentShipId <- getCurrentShipIndex playerId
             attr <- getGameAttribute
-            let player = (_players attr) !! playerId
+            let player = (attr^.players) !! playerId
             setGameAttribute $ (players . ix playerId . currentShip) %~ (+ d) $ attr
         inBound = do
             currentShipId <- getCurrentShipIndex playerId
@@ -263,11 +263,11 @@ nextBulletId :: SGame Int
 nextBulletId = do
     attr <- getGameAttribute
     setGameAttribute $ bulletId %~ (+1) $ attr
-    return $ _bulletId attr
+    return $ attr^.bulletId
 
-_shotSpeed = 3.0
-_shotLifetime = 250
-_shotSafeTime = 30
+shotSpeed = 3.0
+shotLifetime = 250
+shotSafeTime = 30
 
 shoot :: Int -> Modifiers -> Position -> SGame ()
 shoot playerId _ _ = whenRunningGame $ whenPlayerHasShips playerId $ do
@@ -278,12 +278,12 @@ shoot playerId _ _ = whenRunningGame $ whenPlayerHasShips playerId $ do
     when (_shotCooldown attr <= 0) $ do
         let nose = noseAngle (vx, vy) (_angle attr)
         let (nx, ny) = (cos nose, sin nose)
-        let speed = (vx + nx * _shotSpeed, vy + ny * _shotSpeed) --todo rewrite
+        let speed = (vx + nx * shotSpeed, vy + ny * shotSpeed) --todo rewrite
         bulletId <- nextBulletId
         let Color r g b = shotColors !! playerId
         shipName <- getObjectName currentShip
         let bullet = object ("bullet" ++ show bulletId) (Basic $ Circle 1.5 r g b Filled)
-                      False (p +++ speed) speed (BulletAttributes _shotLifetime shipName)
+                      False (p +++ speed) speed (BulletAttributes shotLifetime shipName)
         managers <- getObjectManagers
         setObjectAttribute (shotCooldown .~ shotCooldownConst $ attr) currentShip
         addObjectsToGroup [bullet] bulletsManagerName
@@ -335,30 +335,30 @@ handleLifetimes = forM_ [bulletsManagerName, debrisManagerName] $ \managerName -
     manager <- findObjectManager managerName
     forM_ (getObjectManagerObjects manager) $ (\bullet -> do
         attr <- getObjectAttribute bullet
-        let l = (_lifetime attr) - 1
+        let l = _lifetime attr - 1
         if l < 0 then destroyObject bullet else
             setObjectAttribute (lifetime .~ l $ attr) bullet
      )
 
-_debrisPiecesNumber = (5, 8)
-_debrisRadius = (2.0, _triangleRadius / 2.5)
-_debriLifetime = (100, 200)
-_debrisShift = (0, _triangleRadius)
-_debrisSpeedSpread = (-pi/8, pi/8)
+debrisPiecesNumber = (5, 8)
+debrisRadius = (2.0, triangleRadius / 2.5)
+debrisLifetime = (100, 200)
+debrisShift = (0, triangleRadius)
+debrisSpeedSpread = (-pi/8, pi/8)
 
 createDebris :: Int -> Point -> Vector -> SGame ()
 createDebris playerId (px, py) (vx, vy) = do
-    nDebris <- randomInt _debrisPiecesNumber
+    nDebris <- randomInt debrisPiecesNumber
     objects <- forM [1..nDebris] $ \_ -> do
         objectId <- nextBulletId
-        size <- randomDouble _debrisRadius
-        dpx <- randomDouble _debrisShift
-        dpy <- randomDouble _debrisShift
-        rangle <- randomDouble _debrisSpeedSpread
+        size <- randomDouble debrisRadius
+        dpx <- randomDouble debrisShift
+        dpy <- randomDouble debrisShift
+        rangle <- randomDouble debrisSpeedSpread
         let v = distance (0,0) (vx, vy)
         rv <- randomDouble (v * 0.8, v * 1.2)
         let vangle = noseAngle (vx, vy) 0.0 + rangle
-        time <- randomInt _debriLifetime
+        time <- randomInt debrisLifetime
         let pos = (px + dpx, py + dpy)
         let speed = (rv * cos vangle, rv * sin vangle)
         return $ object ("debris" ++ (show objectId)) (shipPoly pos rangle playerId size False)
@@ -366,7 +366,7 @@ createDebris playerId (px, py) (vx, vy) = do
     addObjectsToGroup objects debrisManagerName
 
 _explosionTime = 5
-_explosionMaxRadius = _triangleRadius
+_explosionMaxRadius = triangleRadius
 
 --createExplosion :: Int -> Point -> Vector -> SGame ()
 --createExplosion
@@ -385,9 +385,9 @@ handleHits = do
                 p <- getObjectPosition o
                 (vx, vy) <- getObjectSpeed o
                 let d = distance (bx, by) p
-                if (d < _triangleRadius &&
-                    (shipName /= (_fromShipName attr) ||
-                    (_lifetime attr < _shotLifetime - _shotSafeTime))) then do
+                if (d < triangleRadius &&
+                    (shipName /= (attr^.fromShipName) ||
+                    (_lifetime attr < shotLifetime - shotSafeTime))) then do
                     if isPlayer then do
                         currentShipName <- getObjectName =<< getCurrentShip playerId
                         destroyObject o
@@ -407,7 +407,7 @@ handleHits = do
 endGame :: [Int] -> SGame ()
 endGame winnerIds = do
     attr <- getGameAttribute
-    let a = attr { _phase = AfterEnd winnerIds }
+    let a = phase .~ AfterEnd winnerIds $ attr
     setObjectManagers $ createGroups a
     setGameAttribute $ a
 
@@ -420,7 +420,7 @@ checkEndGame = do
 gameCycle :: SGame ()
 gameCycle = do
     attr <- getGameAttribute
-    case _phase attr of
+    case attr^.phase of
       Running -> do
           performGravity
           updateShipPictures
@@ -430,7 +430,7 @@ gameCycle = do
           performPlanetCollision
           checkEndGame
       BeforeStart -> do
-          printLines ([gameName, ""] ++ gameIntro ++ "":(shipsSelection (_nShips attr))) Fixed9By15 17 (5, h - 17) (Color 1.0 0.0 0.0)
+          printLines ([gameName, ""] ++ gameIntro ++ "":(shipsSelection (attr^.nShips))) Fixed9By15 17 (5, h - 17) (Color 1.0 0.0 0.0)
           printLines controlsInfo Fixed9By15 (-17) (5, 17) (Color 1.0 0.0 0.0)
       AfterEnd ids -> do
           let winnerStr = case ids of [a] -> "P" ++ show (a + 1) ++ " is the winner"; _ -> "Draw"
