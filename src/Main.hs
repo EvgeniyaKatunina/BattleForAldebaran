@@ -13,20 +13,22 @@ import Geometry
 import Physics
 import Control.Lens
 
-data Color = Color { red :: Float, green :: Float, blue :: Float }
+data Color = Color { _red :: Float, _green :: Float, _blue :: Float }
 
 data Player = Player { _currentShip :: Int }
 data GameAttribute = GameAttribute { _phase :: GamePhase, _players :: [Player], _bulletId :: Int, _nShips :: Int }
 data GamePhase = BeforeStart | Running | AfterEnd [Int] deriving Eq
 
 data ObjectAttributes = NoAttributes |
-                        ShipAttributes { angle :: Double, ownerId :: Int, shotCooldown :: Int } |
-                        BulletAttributes { lifetime :: Int, fromShipName :: String }
+                        ShipAttributes { _angle :: Double, _ownerId :: Int, _shotCooldown :: Int } |
+                        BulletAttributes { _lifetime :: Int, _fromShipName :: String }
 
 type SGame a = IOGame GameAttribute ObjectAttributes () () a
 
 makeLenses ''GameAttribute
 makeLenses ''Player
+makeLenses ''Color
+makeLenses ''ObjectAttributes
 
 gameName = "Battle for Aldebaran"
 
@@ -96,11 +98,11 @@ startGame _ _ = do
     attr <- getGameAttribute
     case (_phase attr) of
         BeforeStart -> do
-            let a = attr { _phase = Running }
+            let a = phase .~ Running $ attr
             setObjectManagers $ createGroups a
             setGameAttribute $ a
         AfterEnd _ -> do
-            let a = attr { _phase = BeforeStart }
+            let a = phase .~ BeforeStart $ attr
             setObjectManagers $ createGroups a
             setGameAttribute $ a
         Running -> return ()
@@ -110,8 +112,7 @@ setNShips n _ _ = do
     attr <- getGameAttribute
     case _phase attr of
         BeforeStart -> do
-            let a = attr { _nShips = n }
-            setGameAttribute $ a
+            setGameAttribute $ nShips .~ n $ attr
         _ -> return ()
 
 exitGame :: Modifiers -> Position -> SGame ()
@@ -125,7 +126,7 @@ exitGame _ _ = do
 main :: IO ()
 main = funInit winConfig gameMap (createGroups initialAttrs) () initialAttrs input (gameCycle) (Timer 20) []
 
-_shotCooldown = 15
+shotCooldownConst = 15
 
 createSpaceship :: Int -> Int -> Color -> Point -> GameObject ObjectAttributes
 createSpaceship ownerId shipId color pos =
@@ -133,7 +134,7 @@ createSpaceship ownerId shipId color pos =
       speed = (0, case ownerId of 0 -> 1.4; 1 -> -1.4)
       angle = 0.0
       spaceshipPic = shipPoly speed angle ownerId _triangleRadius False
-  in object ("ship" ++ (show ownerId) ++ (show shipId)) spaceshipPic False pos speed (ShipAttributes angle ownerId _shotCooldown)
+  in object ("ship" ++ (show ownerId) ++ (show shipId)) spaceshipPic False pos speed (ShipAttributes angle ownerId shotCooldownConst)
 
 _triangleSpread = pi / 4
 _triangleRadius = 8.0
@@ -225,7 +226,7 @@ rotateCurrentShip playerId angleDiff modifiers position =
 rotateShip :: Double -> (GameObject ObjectAttributes) -> SGame ()
 rotateShip angleDiff ship = do
     attr <- getObjectAttribute ship
-    setObjectAttribute (attr { angle = (angle attr) + angleDiff }) ship
+    setObjectAttribute (angle %~ (+angleDiff) $ attr) ship
 
 accelerateCurrentShip :: Int -> Double -> Modifiers -> Position -> SGame ()
 accelerateCurrentShip playerId speedDiff modifiers position = whenRunningGame $ whenPlayerHasShips playerId $ do
@@ -274,8 +275,8 @@ shoot playerId _ _ = whenRunningGame $ whenPlayerHasShips playerId $ do
     p <- getObjectPosition currentShip
     (vx, vy) <- getObjectSpeed currentShip
     attr <- getObjectAttribute currentShip
-    when (shotCooldown attr <= 0) $ do
-        let nose = noseAngle (vx, vy) (angle attr)
+    when (_shotCooldown attr <= 0) $ do
+        let nose = noseAngle (vx, vy) (_angle attr)
         let (nx, ny) = (cos nose, sin nose)
         let speed = (vx + nx * _shotSpeed, vy + ny * _shotSpeed) --todo rewrite
         bulletId <- nextBulletId
@@ -284,7 +285,7 @@ shoot playerId _ _ = whenRunningGame $ whenPlayerHasShips playerId $ do
         let bullet = object ("bullet" ++ show bulletId) (Basic $ Circle 1.5 r g b Filled)
                       False (p +++ speed) speed (BulletAttributes _shotLifetime shipName)
         managers <- getObjectManagers
-        setObjectAttribute (attr { shotCooldown = _shotCooldown }) currentShip
+        setObjectAttribute (shotCooldown .~ shotCooldownConst $ attr) currentShip
         addObjectsToGroup [bullet] bulletsManagerName
 
 performGravity :: SGame ()
@@ -325,7 +326,7 @@ handleCooldowns = do
         manager <- findObjectManager n
         forM_ (getObjectManagerObjects manager) $ (\ship -> do
             attr <- getObjectAttribute ship
-            setObjectAttribute (attr { shotCooldown = (shotCooldown attr) - 1 }) ship
+            setObjectAttribute (attr { _shotCooldown = (_shotCooldown attr) - 1 }) ship
          )
      )
 
@@ -334,9 +335,9 @@ handleLifetimes = forM_ [bulletsManagerName, debrisManagerName] $ \managerName -
     manager <- findObjectManager managerName
     forM_ (getObjectManagerObjects manager) $ (\bullet -> do
         attr <- getObjectAttribute bullet
-        let l = (lifetime attr) - 1
+        let l = (_lifetime attr) - 1
         if l < 0 then destroyObject bullet else
-            setObjectAttribute (attr { lifetime = l }) bullet
+            setObjectAttribute (lifetime .~ l $ attr) bullet
      )
 
 _debrisPiecesNumber = (5, 8)
@@ -385,8 +386,8 @@ handleHits = do
                 (vx, vy) <- getObjectSpeed o
                 let d = distance (bx, by) p
                 if (d < _triangleRadius &&
-                    (shipName /= (fromShipName attr) ||
-                    (lifetime attr < _shotLifetime - _shotSafeTime))) then do
+                    (shipName /= (_fromShipName attr) ||
+                    (_lifetime attr < _shotLifetime - _shotSafeTime))) then do
                     if isPlayer then do
                         currentShipName <- getObjectName =<< getCurrentShip playerId
                         destroyObject o
