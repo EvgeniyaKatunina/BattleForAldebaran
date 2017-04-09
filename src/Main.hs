@@ -70,6 +70,9 @@ spaceshipManagerNames = ["ships1", "ships2"]
 bulletsManagerName = "bullets"
 bulletsGroup = objectGroup bulletsManagerName []
 
+explosionsManagerName = "explosions"
+explosionsGroup = objectGroup explosionsManagerName []
+
 planetRadius = 80.0
 planetManagerName = "planetGroup"
 
@@ -88,7 +91,8 @@ spaceships2 n = objectGroup (spaceshipManagerNames !! 1) $
 createGroups :: GameAttribute -> [ObjectManager ObjectAttributes]
 createGroups attr = case attr^.phase of
     BeforeStart -> [planetGroup]
-    Running -> let n = attr^.nShips in [planetGroup, bulletsGroup, debrisGroup, spaceships1 n, spaceships2 n]
+    Running -> let n = attr^.nShips in [planetGroup, bulletsGroup, debrisGroup, explosionsGroup,
+                                         spaceships1 n, spaceships2 n]
     AfterEnd _ -> [planetGroup]
 
 input = [(Char ' ', Press, startGame), (SpecialKey KeyF2, Press, exitGame)] ++
@@ -352,7 +356,7 @@ handleCooldowns =
      )
 
 handleLifetimes :: SGame ()
-handleLifetimes = forM_ [bulletsManagerName, debrisManagerName] $ \managerName -> do
+handleLifetimes = forM_ [bulletsManagerName, debrisManagerName, explosionsManagerName] $ \managerName -> do
     manager <- findObjectManager managerName
     forM_ (getObjectManagerObjects manager) (\bullet -> do
         attr <- getObjectAttribute bullet
@@ -386,11 +390,28 @@ createDebris playerId (px, py) (vx, vy) = do
                                 False pos speed (BulletAttributes time "")
     addObjectsToGroup objects debrisManagerName
 
-_explosionTime = 5
-_explosionMaxRadius = triangleRadius
+explosionTime = 7
+explosionParticles = 6
+explosionShift = (0, triangleRadius)
+explosionSpeed = (1.5, 2.5)
+explosionRadius = (triangleRadius / 3, triangleRadius / 2)
 
---createExplosion :: Int -> Point -> Vector -> SGame ()
---createExplosion
+createExplosion :: Int -> Point -> Vector -> SGame ()
+createExplosion playerId p (vx, vy) = do
+    manager <- findObjectManager explosionsManagerName
+    objects <- forM [1..explosionParticles] $ \_ -> do
+        objectId <- nextBulletId
+        dpx <- randomDouble explosionRadius
+        dpy <- randomDouble explosionRadius
+        angle <- randomDouble (0, 2 * pi)
+        dv <- randomDouble explosionSpeed
+        let (dvx, dvy) = (dv * cos angle, dv * sin angle)
+        er <- randomDouble explosionRadius
+        let Color r g b = playerColors !! playerId
+        return $ object ("explosion" ++ (show objectId)) (Basic (Circle er r g b Filled))
+                                        False p (vx + dvx, vy + dvy) (BulletAttributes explosionTime "")
+    addObjectsToGroup objects debrisManagerName
+
 handleHits :: SGame ()
 handleHits = do
     bulletManager <- findObjectManager bulletsManagerName
@@ -413,6 +434,7 @@ handleHits = do
                         currentShipName <- getObjectName =<< getCurrentShip playerId
                         destroyObject o
                         createDebris playerId p (vx * 0.8 + bvx * 0.2, vy * 0.8 + bvy * 0.2)
+                        createExplosion playerId p (vx * 0.8 + bvx * 0.2, vy * 0.8 + bvy * 0.2)
                         if shipName == currentShipName then switchToNextShip' 1 playerId else do
                             objs <- getObjectManagerObjects <$> findObjectManager targetManager
                             names <- mapM getObjectName objs
