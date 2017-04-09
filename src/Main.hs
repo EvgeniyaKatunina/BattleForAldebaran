@@ -33,8 +33,8 @@ playerColors = [Color 0.0 1.0 0.0,
                 Color 0.3 0.3 1.0]
 shotColors = [Color 1.0 1.0 0.0,
               Color 1.0 0.0 1.0]
-playerKeys = [(SpecialKey KeyRight, SpecialKey KeyLeft, SpecialKey KeyUp, Char '.', SpecialKey KeyDown),
-              (Char 'd', Char 'a', Char 'w', Char 'q', Char 's')]
+playerKeys = [(SpecialKey KeyRight, SpecialKey KeyLeft, SpecialKey KeyUp, Char '.', Char ',', SpecialKey KeyDown),
+              (Char 'd', Char 'a', Char 'w', Char 'q', Char 'e', Char 's')]
 
 spaceshipManagerNames = ["ships1", "ships2"]
 
@@ -65,11 +65,12 @@ createGroups attr = case phase attr of
 input = [(Char ' ', Press, startGame), (SpecialKey KeyF2, Press, exitGame)] ++
         map (\i -> (Char (show i !! 0), Press, setNShips i)) [1..9] ++
         concatMap createInput (zip [0..] playerKeys) where
-              createInput (player, (r, l, u, n, s)) = [
+              createInput (player, (r, l, u, n, p, s)) = [
                 (r, StillDown, rotateCurrentShip player (-0.1)),
                 (l, StillDown, rotateCurrentShip player 0.1),
                 (u, StillDown, accelerateCurrentShip player 0.04),
-                (n, Press, switchToNextShip player),
+                (n, Press, switchToNextShip 1 player),
+                (p, Press, switchToNextShip (-1) player),
                 (s, Press, shoot player)]
 
 initialAttrs = GameAttribute BeforeStart (map (\_ -> Player 0) [0, 1]) 0 defaultNShips
@@ -232,16 +233,16 @@ isInBound :: Point -> Bool
 isInBound (px, py) = px >= -_triangleRadius && px <= w + _triangleRadius &&
                      py >= -_triangleRadius && py <= h + _triangleRadius
 
-switchToNextShip :: Int -> Modifiers -> Position -> SGame ()
-switchToNextShip playerId _ _ = switchToNextShip' playerId
+switchToNextShip :: Int -> Int -> Modifiers -> Position -> SGame ()
+switchToNextShip d playerId _ _ = switchToNextShip' d playerId
 
-switchToNextShip' :: Int -> SGame ()
-switchToNextShip' playerId = do
+switchToNextShip' :: Int -> Int -> SGame ()
+switchToNextShip' d playerId = do
     canSwitch <- playerHasShipsInBound playerId
     when canSwitch $ untilM_ next inBound where
         next = do
             currentShipId <- getCurrentShipIndex playerId
-            let newShipId = currentShipId + 1
+            let newShipId = currentShipId + d
             attr <- getGameAttribute
             let player = (players attr) !! playerId
             setGameAttribute $ attr { players = (players attr) & element playerId .~ (player { currentShip = newShipId }) }
@@ -385,7 +386,7 @@ handleHits = do
                         currentShipName <- getObjectName =<< getCurrentShip playerId
                         destroyObject o
                         createDebris playerId p (vx * 0.8 + bvx * 0.2, vy * 0.8 + bvy * 0.2)
-                        if shipName == currentShipName then switchToNextShip' playerId else do
+                        if shipName == currentShipName then switchToNextShip' 1 playerId else do
                             objs <- getObjectManagerObjects <$> findObjectManager targetManager
                             names <- mapM getObjectName objs
                             let Just i = findIndex (\x -> x == currentShipName) names
@@ -442,13 +443,13 @@ controlsInfo = ["Controls for P1:",
                 "Left/Right - rotate ship",
                 "Up - accelerate",
                 "Down - shoot",
-                ". (dot) - select next ship",
+                ". and , - select ship",
                 "",
                 "Controls for P2:",
                 "A/D - rotate  ship",
                 "W - accelerate",
                 "S - shoot",
-                "Q - select next ship",
+                "Q and E - select ship",
                 "",
                 "Press SPACE to start or F2 to exit game"]
 
