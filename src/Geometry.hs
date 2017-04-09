@@ -3,7 +3,6 @@ module Geometry where
 type Point = (Double, Double)
 type Vector = (Double, Double)
 
-
 getX :: (a, a) -> a
 getX = fst
 
