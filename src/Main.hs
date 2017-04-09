@@ -14,7 +14,7 @@ data Color = Color { red :: Float, green :: Float, blue :: Float }
 
 data Player = Player { currentShip :: Int }
 data GamePhase = BeforeStart | Running | AfterEnd [Int] deriving Eq
-data GameAttribute = GameAttribute { phase :: GamePhase, players :: [Player], bulletId :: Int }
+data GameAttribute = GameAttribute { phase :: GamePhase, players :: [Player], bulletId :: Int, nShips :: Int }
 
 data ObjectAttributes = NoAttributes |
                         ShipAttributes { angle :: Double, ownerId :: Int, shotCooldown :: Int } |
@@ -24,7 +24,7 @@ type SGame a = IOGame GameAttribute ObjectAttributes () () a
 
 gameName = "Battle for Aldebaran"
 
-nShips = 3
+defaultNShips = 3
 
 gameMap = colorMap 0 0 0 w h
 winConfig = ((100,80),(width,height), gameName)
@@ -49,20 +49,21 @@ planetGroup = objectGroup planetManagerName [planet]
 debrisManagerName = "debrisGroup"
 debrisGroup = objectGroup debrisManagerName []
 
-spaceships1 = objectGroup (spaceshipManagerNames !! 0) $
+spaceships1 n = objectGroup (spaceshipManagerNames !! 0) $
                         map (\i -> createSpaceship 0 i (Color 0.0 1.0 0.0) (w/2 + w/3 + 10 * (fromIntegral i), h/2))
-                            [1..nShips]
-spaceships2 = objectGroup (spaceshipManagerNames !! 1) $
+                            [1..n]
+spaceships2 n = objectGroup (spaceshipManagerNames !! 1) $
                         map (\i -> createSpaceship 1 i (Color 0.0 0.0 1.0) (w/2 - w/3 - 10 * (fromIntegral i), h/2 + 30))
-                            [1..nShips]
+                            [1..n]
 
 createGroups :: GameAttribute -> [ObjectManager ObjectAttributes]
 createGroups attr = case phase attr of
     BeforeStart -> [planetGroup]
-    Running -> [planetGroup, bulletsGroup, debrisGroup, spaceships1, spaceships2]
+    Running -> let n = nShips attr in [planetGroup, bulletsGroup, debrisGroup, spaceships1 n, spaceships2 n]
     AfterEnd _ -> [planetGroup]
 
 input = [(Char ' ', Press, startGame), (SpecialKey KeyF2, Press, exitGame)] ++
+        map (\i -> (Char (show i !! 0), Press, setNShips i)) [1..9] ++
         concatMap createInput (zip [0..] playerKeys) where
               createInput (player, (r, l, u, n, s)) = [
                 (r, StillDown, rotateCurrentShip player (-0.1)),
@@ -71,7 +72,7 @@ input = [(Char ' ', Press, startGame), (SpecialKey KeyF2, Press, exitGame)] ++
                 (n, Press, switchToNextShip player),
                 (s, Press, shoot player)]
 
-initialAttrs = GameAttribute BeforeStart (map (\_ -> Player 0) [0, 1]) 0
+initialAttrs = GameAttribute BeforeStart (map (\_ -> Player 0) [0, 1]) 0 defaultNShips
 
 planet :: GameObject ObjectAttributes
 planet =
@@ -89,13 +90,22 @@ startGame _ _ = do
     case (phase attr) of
         BeforeStart -> do
             let a = attr { phase = Running }
-            setObjectManagers (createGroups a)
+            setObjectManagers $ createGroups a
             setGameAttribute $ a
         AfterEnd _ -> do
             let a = attr { phase = BeforeStart }
-            setObjectManagers (createGroups a)
+            setObjectManagers $ createGroups a
             setGameAttribute $ a
         Running -> return ()
+
+setNShips :: Int -> Modifiers -> Position -> SGame ()
+setNShips n _ _ = do
+    attr <- getGameAttribute
+    case phase attr of
+        BeforeStart -> do
+            let a = attr { nShips = n }
+            setGameAttribute $ a
+        _ -> return ()
 
 exitGame :: Modifiers -> Position -> SGame ()
 exitGame _ _ = do
@@ -413,7 +423,7 @@ gameCycle = do
           performPlanetCollision
           checkEndGame
       BeforeStart -> do
-          printLines ([gameName, ""] ++ gameIntro) Fixed9By15 17 (5, h - 17) (Color 1.0 0.0 0.0)
+          printLines ([gameName, ""] ++ gameIntro ++ "":(shipsSelection (nShips attr))) Fixed9By15 17 (5, h - 17) (Color 1.0 0.0 0.0)
           printLines controlsInfo Fixed9By15 (-17) (5, 17) (Color 1.0 0.0 0.0)
       AfterEnd ids -> do
           let winnerStr = case ids of [a] -> "P" ++ show (a + 1) ++ " is the winner"; _ -> "Draw"
@@ -442,4 +452,6 @@ controlsInfo = ["Controls for P1:",
                 "",
                 "Press SPACE to start or F2 to exit game"]
 
-restartInfo = ["Press SPACE to return to title screen or F2 to exit"]
+restartInfo = ["Press SPACE to return to the title screen or F2 to exit"]
+
+shipsSelection n = ["Number of ships: " ++ (show n), "(enter: 1 to 9)"]
