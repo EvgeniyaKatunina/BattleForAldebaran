@@ -1,3 +1,5 @@
+{-# LANGUAGE TemplateHaskell #-}
+
 module Main where
 
 import Graphics.UI.Fungen hiding (when)
@@ -9,18 +11,22 @@ import Control.Monad
 import Control.Monad.Loops
 import Geometry
 import Physics
+import Control.Lens
 
 data Color = Color { red :: Float, green :: Float, blue :: Float }
 
-data Player = Player { currentShip :: Int }
+data Player = Player { _currentShip :: Int }
+data GameAttribute = GameAttribute { _phase :: GamePhase, _players :: [Player], _bulletId :: Int, _nShips :: Int }
 data GamePhase = BeforeStart | Running | AfterEnd [Int] deriving Eq
-data GameAttribute = GameAttribute { phase :: GamePhase, players :: [Player], bulletId :: Int, nShips :: Int }
 
 data ObjectAttributes = NoAttributes |
                         ShipAttributes { angle :: Double, ownerId :: Int, shotCooldown :: Int } |
                         BulletAttributes { lifetime :: Int, fromShipName :: String }
 
 type SGame a = IOGame GameAttribute ObjectAttributes () () a
+
+makeLenses ''GameAttribute
+makeLenses ''Player
 
 gameName = "Battle for Aldebaran"
 
@@ -57,9 +63,9 @@ spaceships2 n = objectGroup (spaceshipManagerNames !! 1) $
                             [1..n]
 
 createGroups :: GameAttribute -> [ObjectManager ObjectAttributes]
-createGroups attr = case phase attr of
+createGroups attr = case _phase attr of
     BeforeStart -> [planetGroup]
-    Running -> let n = nShips attr in [planetGroup, bulletsGroup, debrisGroup, spaceships1 n, spaceships2 n]
+    Running -> let n = _nShips attr in [planetGroup, bulletsGroup, debrisGroup, spaceships1 n, spaceships2 n]
     AfterEnd _ -> [planetGroup]
 
 input = [(Char ' ', Press, startGame), (SpecialKey KeyF2, Press, exitGame)] ++
@@ -88,13 +94,13 @@ h = fromIntegral height :: GLdouble
 startGame :: Modifiers -> Position -> SGame ()
 startGame _ _ = do
     attr <- getGameAttribute
-    case (phase attr) of
+    case (_phase attr) of
         BeforeStart -> do
-            let a = attr { phase = Running }
+            let a = attr { _phase = Running }
             setObjectManagers $ createGroups a
             setGameAttribute $ a
         AfterEnd _ -> do
-            let a = attr { phase = BeforeStart }
+            let a = attr { _phase = BeforeStart }
             setObjectManagers $ createGroups a
             setGameAttribute $ a
         Running -> return ()
@@ -102,16 +108,16 @@ startGame _ _ = do
 setNShips :: Int -> Modifiers -> Position -> SGame ()
 setNShips n _ _ = do
     attr <- getGameAttribute
-    case phase attr of
+    case _phase attr of
         BeforeStart -> do
-            let a = attr { nShips = n }
+            let a = attr { _nShips = n }
             setGameAttribute $ a
         _ -> return ()
 
 exitGame :: Modifiers -> Position -> SGame ()
 exitGame _ _ = do
     attr <- getGameAttribute
-    case (phase attr) of
+    case (_phase attr) of
         BeforeStart -> funExit
         AfterEnd _ -> funExit
         Running -> endGame []
@@ -174,15 +180,16 @@ replaceObjectGroup name m (x:xs) = if name == getObjectManagerName x then m:xxs 
 setCurrentShipIndex :: Int -> Int -> SGame ()
 setCurrentShipIndex playerId shipIndex = do
     attr <- getGameAttribute
-    let player = (players attr) !! playerId
-    setGameAttribute $ attr { players = (players attr) & element playerId .~ (player { currentShip = shipIndex }) }
+    let player = (_players attr) !! playerId
+    setGameAttribute $ attr { _players = (_players attr) & element playerId .~ (player { _currentShip = shipIndex }) }
 
 getCurrentShipIndex :: Int -> SGame Int
 getCurrentShipIndex playerId = do
     attr <- getGameAttribute
     manager <- findObjectManager (spaceshipManagerNames !! playerId)
     let ships = (getObjectManagerObjects manager)
-    return $ currentShip (players attr !! playerId) `mod` (length ships)
+    let ship = attr ^. singular (players . ix playerId . currentShip)
+    return $ ship `mod` (length ships)
 
 getCurrentShip :: Int -> SGame (GameObject ObjectAttributes)
 getCurrentShip playerId = do
@@ -206,7 +213,7 @@ playerHasShipsInBound playerId = do
     return (not $ null $ shipsInBound)
 
 whenRunningGame :: SGame () -> SGame ()
-whenRunningGame m = getGameAttribute >>= \a -> when (phase a == Running) m where
+whenRunningGame m = getGameAttribute >>= \a -> when (_phase a == Running) m where
 
 whenPlayerHasShips :: Int -> SGame () -> SGame ()
 whenPlayerHasShips playerId m = playerHasShips playerId >>= \b -> when b m
@@ -228,7 +235,7 @@ accelerateCurrentShip playerId speedDiff modifiers position = whenRunningGame $ 
     let noseAngle = angle + atan (vy / vx) + (if signum vx == -1 then pi else 0) --todo generify angle calculation
     let (dvx, dvy) = (cos noseAngle * speedDiff, sin noseAngle * speedDiff)
     setObjectSpeed (vx + dvx, vy + dvy) ship
-
+    
 isInBound :: Point -> Bool
 isInBound (px, py) = px >= -_triangleRadius && px <= w + _triangleRadius &&
                      py >= -_triangleRadius && py <= h + _triangleRadius
@@ -242,10 +249,9 @@ switchToNextShip' d playerId = do
     when canSwitch $ untilM_ next inBound where
         next = do
             currentShipId <- getCurrentShipIndex playerId
-            let newShipId = currentShipId + d
             attr <- getGameAttribute
-            let player = (players attr) !! playerId
-            setGameAttribute $ attr { players = (players attr) & element playerId .~ (player { currentShip = newShipId }) }
+            let player = (_players attr) !! playerId
+            setGameAttribute $ over (players . ix playerId . currentShip) (+ d) attr
         inBound = do
             currentShipId <- getCurrentShipIndex playerId
             manager <- findObjectManager $ spaceshipManagerNames !! playerId
@@ -255,8 +261,8 @@ switchToNextShip' d playerId = do
 nextBulletId :: SGame Int
 nextBulletId = do
     attr <- getGameAttribute
-    let nextId = 1 + bulletId attr
-    setGameAttribute $ attr { bulletId = nextId }
+    let nextId = 1 + _bulletId attr
+    setGameAttribute $ attr { _bulletId = nextId }
     return nextId
 
 _shotSpeed = 3.0
@@ -401,7 +407,7 @@ handleHits = do
 endGame :: [Int] -> SGame ()
 endGame winnerIds = do
     attr <- getGameAttribute
-    let a = attr { phase = AfterEnd winnerIds }
+    let a = attr { _phase = AfterEnd winnerIds }
     setObjectManagers $ createGroups a
     setGameAttribute $ a
 
@@ -414,7 +420,7 @@ checkEndGame = do
 gameCycle :: SGame ()
 gameCycle = do
     attr <- getGameAttribute
-    case phase attr of
+    case _phase attr of
       Running -> do
           performGravity
           updateShipPictures
@@ -424,7 +430,7 @@ gameCycle = do
           performPlanetCollision
           checkEndGame
       BeforeStart -> do
-          printLines ([gameName, ""] ++ gameIntro ++ "":(shipsSelection (nShips attr))) Fixed9By15 17 (5, h - 17) (Color 1.0 0.0 0.0)
+          printLines ([gameName, ""] ++ gameIntro ++ "":(shipsSelection (_nShips attr))) Fixed9By15 17 (5, h - 17) (Color 1.0 0.0 0.0)
           printLines controlsInfo Fixed9By15 (-17) (5, 17) (Color 1.0 0.0 0.0)
       AfterEnd ids -> do
           let winnerStr = case ids of [a] -> "P" ++ show (a + 1) ++ " is the winner"; _ -> "Draw"
