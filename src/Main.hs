@@ -261,9 +261,8 @@ switchToNextShip' d playerId = do
 nextBulletId :: SGame Int
 nextBulletId = do
     attr <- getGameAttribute
-    let nextId = 1 + _bulletId attr
-    setGameAttribute $ attr { _bulletId = nextId }
-    return nextId
+    setGameAttribute $ over bulletId (+1) attr
+    return $ _bulletId attr
 
 _shotSpeed = 3.0
 _shotLifetime = 250
