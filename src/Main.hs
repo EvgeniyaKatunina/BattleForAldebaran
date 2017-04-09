@@ -251,7 +251,7 @@ switchToNextShip' d playerId = do
             currentShipId <- getCurrentShipIndex playerId
             attr <- getGameAttribute
             let player = (_players attr) !! playerId
-            setGameAttribute $ over (players . ix playerId . currentShip) (+ d) attr
+            setGameAttribute $ (players . ix playerId . currentShip) %~ (+ d) $ attr
         inBound = do
             currentShipId <- getCurrentShipIndex playerId
             manager <- findObjectManager $ spaceshipManagerNames !! playerId
@@ -261,7 +261,7 @@ switchToNextShip' d playerId = do
 nextBulletId :: SGame Int
 nextBulletId = do
     attr <- getGameAttribute
-    setGameAttribute $ over bulletId (+1) attr
+    setGameAttribute $ bulletId %~ (+1) $ attr
     return $ _bulletId attr
 
 _shotSpeed = 3.0
