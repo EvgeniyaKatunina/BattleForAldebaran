@@ -89,8 +89,8 @@ playerHasShipsInBound :: Int -> SGame Bool
 playerHasShipsInBound playerId = do
     manager <- findObjectManager (spaceshipManagerNames !! playerId)
     let c o = do
-        p <- getObjectPosition o
-        return $ isInBound p
+                p <- getObjectPosition o
+                return $ isInBound p
     shipsInBound <- filterM c $ getObjectManagerObjects manager
     return (not $ null shipsInBound)
 
