@@ -1,3 +1,4 @@
+
 # Battle for Aldebaran
 
 A retro-style game implemented in Haskell with FunGEn
@@ -16,6 +17,9 @@ You can play around with the game parameters, changing them in [`GameParameters.
 
 The gameplay is quite straightforward: you control a starfleet of several ships (one at a time) and your goal is to destroy all enemy ships. 
 What complicates the matter is that the ships and the gunshots and everyhing moves in the orbits.
+Controls for Player 1: Left/Right - rotate ship, Up - accelerate, Down - shoot, . - next ship, ',' - previous ship.
+Controls for Player 2: A/D - rotate ship, W - accelerate, S - shoot, Q - next ship, E - previous ship.
+SPACE to start game and F2 to exit game.
 
 # Acknowledgements
 
