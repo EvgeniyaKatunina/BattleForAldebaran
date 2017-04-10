@@ -19,18 +19,18 @@ import Graphics.UI.Fungen hiding (when)
 makeShot :: Int ->  SGame ()
 makeShot playerId = whenRunningGame $ whenPlayerHasShips playerId $ do
     currentShip <- getCurrentShip playerId
-    p <- getObjectPosition currentShip
-    (vx, vy) <- getObjectSpeed currentShip
+    Point pos <- Point <$> getObjectPosition currentShip
+    v@(Vector (vx, vy)) <- Vector <$> getObjectSpeed currentShip
     attr <- getObjectAttribute currentShip
     when (_shotCooldown attr <= 0) $ do
-        let nose = noseAngle (vx, vy) (_angle attr)
-        let (nx, ny) = (cos nose, sin nose)
-        let speed = (vx, vy) +++ (shotSpeed *** (nx, ny))
+        let nose = noseAngle v (_angle attr)
+        let n = Vector (cos nose, sin nose)
+        let Vector speed = v ^+^ (shotSpeed #*^ n)
         bulletId <- nextBulletId
         let Color r g b = shotColors !! playerId
         shipName <- getObjectName currentShip
         let bullet = object ("bullet" ++ show bulletId) (Basic $ Circle 1.5 r g b Filled)
-                      False (p +++ speed) speed (BulletAttributes shotLifetime shipName)
+                      False pos speed (BulletAttributes shotLifetime shipName)
         managers <- getObjectManagers
         setObjectAttribute (shotCooldown .~ shotCooldownConst $ attr) currentShip
         addObjectsToGroup [bullet] bulletsManagerName
@@ -46,9 +46,9 @@ updateShipPictures = do
         newObjects <- forM (zip [0..] objects) $ \(shipId, o) -> do
             name <- getObjectName o
             position <- getObjectPosition o
-            speed <- getObjectSpeed o
+            sv@(Vector speed) <- Vector <$> getObjectSpeed o
             a@(ShipAttributes angle ownerId _) <- getObjectAttribute o
-            return $ object name (shipPoly speed angle ownerId triangleRadius (shipId == currentShipIndex)) False position speed a
+            return $ object name (shipPoly sv angle ownerId triangleRadius (shipId == currentShipIndex)) False position speed a
         return $ objectGroup managerName newObjects
     setObjectManagers $ foldr (\a b -> replaceObjectGroup (getObjectManagerName a) a b) managers newManagers
 
@@ -64,13 +64,14 @@ performGravity = forM_ (bulletsManagerName:debrisManagerName:spaceshipManagerNam
 handleGravity :: GameObject ObjectAttributes -> SGame ()
 handleGravity object = do
     planet <- findObject "planet" "planetGroup"
-    (px, py) <- getObjectPosition planet
-    (vx, vy) <- getObjectSpeed object
-    (sx, sy) <- getObjectPosition object
-    let (dx, dy) = diff (px, py) (sx, sy)
-    let r = distance (px, py) (sx, sy)
-    let acceleration = accelerationValue r *** ort (px, py) (sx, sy)
-    setObjectSpeed ((vx , vy) +++ acceleration) object
+    p <- Point <$> getObjectPosition planet
+    v <- Vector <$> getObjectSpeed object
+    s <- Point <$> getObjectPosition object
+    let Vector (dx, dy) = diff p s
+    let r = distance p s
+    let acceleration = accelerationValue r #*^ ort p s
+    let Vector rv = v ^+^ acceleration
+    setObjectSpeed rv object
 
 -- |Makes the ship collided with the planet disappear from the game.
 performPlanetCollision :: SGame ()
@@ -82,7 +83,7 @@ performPlanetCollision = do
         let ships = getObjectManagerObjects manager
         forM_ ships $ \ship -> do
             (x, y) <- getObjectPosition ship
-            let r = distance (px, py) (x, y)
+            let r = distance (Point (px, py)) (Point (x, y))
             when (r < planetRadius) $ destroyObject ship
 
 -- |Decrements the time which is needed to make the next shot possible.
@@ -109,7 +110,7 @@ handleLifetimes = forM_ [bulletsManagerName, debrisManagerName, explosionsManage
 -- for the player which spaceship was hit, Point, Vector arguments determine where and with which speed the debris must
 -- appear.
 createDebris :: Int -> Point -> Vector -> SGame ()
-createDebris playerId (px, py) (vx, vy) = do
+createDebris playerId p@(Point (px, py)) v@(Vector (vx, vy)) = do
     nDebris <- randomInt debrisPiecesNumber
     objects <- forM [1..nDebris] $ \_ -> do
         objectId <- nextBulletId
@@ -117,13 +118,13 @@ createDebris playerId (px, py) (vx, vy) = do
         dpx <- randomDouble debrisShift
         dpy <- randomDouble debrisShift
         rangle <- randomDouble debrisSpeedSpread
-        let v = distance (0,0) (vx, vy)
-        rv <- randomDouble (v * 0.8, v * 1.2)
-        let vangle = noseAngle (vx, vy) 0.0 + rangle
+        let sv = distance (Point (0,0)) (Point (0, 0) .+^ v)
+        rv <- randomDouble (sv * 0.8, sv * 1.2)
+        let vangle = noseAngle v 0.0 + rangle
         time <- randomInt debrisLifetime
         let pos = (px + dpx, py + dpy)
         let speed = (rv * cos vangle, rv * sin vangle)
-        return $ object ("debris" ++ show objectId) (shipPoly pos rangle playerId size False)
+        return $ object ("debris" ++ show objectId) (shipPoly (Vector (dpx, dpy)) rangle playerId size False)
                                 False pos speed (BulletAttributes time "")
     addObjectsToGroup objects debrisManagerName
 
@@ -131,7 +132,7 @@ createDebris playerId (px, py) (vx, vy) = do
 -- for the player which spaceship was hit, Point, Vector arguments determine where and with which speed the debris must
 -- appear.
 createExplosion :: Int -> Point -> Vector -> SGame ()
-createExplosion playerId p (vx, vy) = do
+createExplosion playerId (Point (px, py)) v@(Vector (vx, vy)) = do
     manager <- findObjectManager explosionsManagerName
     objects <- forM [1..explosionParticles] $ \_ -> do
         objectId <- nextBulletId
@@ -143,7 +144,7 @@ createExplosion playerId p (vx, vy) = do
         er <- randomDouble explosionRadius
         let Color r g b = playerColors !! playerId
         return $ object ("explosion" ++ (show objectId)) (Basic (Circle er r g b Filled))
-                                        False p (vx + dvx, vy + dvy) (BulletAttributes explosionTime "")
+                                        False (px + dpx, py + dpy) (vx + dvx, vy + dvy) (BulletAttributes explosionTime "")
     addObjectsToGroup objects debrisManagerName
 
 -- |Does all of the stuff which must happen after the spaceship is hit. It switches the
@@ -154,23 +155,23 @@ handleHits = do
     bulletManager <- findObjectManager bulletsManagerName
     forM_ (getObjectManagerObjects bulletManager) $ \bullet -> do
         (bx, by) <- getObjectPosition bullet
-        (bvx, bvy) <- getObjectSpeed bullet
+        bv <- Vector <$> getObjectSpeed bullet
         attr <- getObjectAttribute bullet
         let check (targetManager, playerId) = do
                                                 let isPlayer = playerId >= 0
                                                 shipManager <- findObjectManager targetManager
                                                 flip filterM (getObjectManagerObjects shipManager) (\o -> do
                                                     shipName <- getObjectName o
-                                                    p <- getObjectPosition o
-                                                    (vx, vy) <- getObjectSpeed o
-                                                    let d = distance (bx, by) p
+                                                    p <- Point <$> getObjectPosition o
+                                                    v <- Vector <$> getObjectSpeed o
+                                                    let d = distance (Point (bx, by)) p
                                                     if d < triangleRadius &&
                                                         (shipName /= (attr^.fromShipName) ||
                                                         (_lifetime attr < shotLifetime - shotSafeTime)) then do
                                                         if isPlayer then do
                                                             currentShipName <- getObjectName =<< getCurrentShip playerId
                                                             destroyObject o
-                                                            let impulse = addImpulse 0.8 0.2 (vx, vy) (bvx, bvy)
+                                                            let impulse = addImpulse 0.8 0.2 v bv
                                                             createDebris playerId p impulse
                                                             createExplosion playerId p impulse
                                                             if shipName == currentShipName then switchToNextShip 1 playerId else do

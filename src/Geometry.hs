@@ -1,38 +1,31 @@
 module Geometry where
 
-type Point = (Double, Double)
-type Vector = (Double, Double)
-
-getX :: (a, a) -> a
-getX = fst
-
-getY :: (a, a) -> a
-getY = snd
+newtype Point = Point (Double, Double)
+newtype Vector = Vector (Double, Double)
 
 distance :: Point -> Point -> Double
 distance pa pb = sqrt (dx * dx + dy * dy)
-    where d = diff pa pb
-          dx = getX d
-          dy = getY d
-
-diff :: Point -> Point -> Vector
-diff pa pb = (getX pa - getX pb, getY pa - getY pb)
+    where Vector (dx, dy) = diff pa pb
 
 ort :: Point -> Point -> Vector
-ort pa pb = (dx / r, dy / r)
-    where d = diff pa pb
-          dx = getX d
-          dy = getY d
+ort pa pb = Vector (dx / r, dy / r)
+    where Vector (dx, dy) = diff pa pb
           r = distance pa pb
 
-(***) :: Double -> Vector -> Vector
-koeff *** vector = (getX vector * koeff, getY vector * koeff)
+diff :: Point -> Point -> Vector
+diff (Point (ax, ay)) (Point (bx, by)) = Vector (ax - bx, ay - by)
 
-(+++) :: Vector -> Vector -> Vector
-vectorA +++ vectorB = (getX vectorA + getX vectorB, getY vectorA + getY vectorB)
+(#*^) :: Double -> Vector -> Vector
+coeff #*^ Vector (vx, vy) = Vector (vx * coeff, vy * coeff)
+
+(^+^) :: Vector -> Vector -> Vector
+Vector (v1x, v1y) ^+^ Vector (v2x, v2y) = Vector (v1x + v2x, v1y + v2y)
+
+(.+^) :: Point -> Vector -> Point
+Point (px, py) .+^ Vector (vx, vy) = Point (px + vx, py + vy)
 
 noseAngle :: Vector -> Double -> Double
 noseAngle v angle = directionAngle v + angle
 
 directionAngle :: Vector -> Double
-directionAngle (vx, vy) = atan (vy / vx) + (if signum vx == -1 then pi else 0)
+directionAngle (Vector (vx, vy)) = atan (vy / vx) + (if signum vx == -1 then pi else 0)

@@ -41,16 +41,16 @@ debrisManagerName :: String
 debrisManagerName = "debrisGroup"
 
 createSpaceship :: Int -> Int -> Color -> Point -> GameObject ObjectAttributes
-createSpaceship ownerId shipId color pos =
+createSpaceship ownerId shipId color (Point pos) =
   let Color r g b = color
       speed = (0, case ownerId of 0 -> spawnOrbitalSpeed; 1 -> -spawnOrbitalSpeed)
       angle = 0.0
-      spaceshipPic = shipPoly speed angle ownerId triangleRadius False
+      spaceshipPic = shipPoly (Vector speed) angle ownerId triangleRadius False
   in object ("ship" ++ show ownerId ++ show shipId) spaceshipPic False pos speed (ShipAttributes angle ownerId shotCooldownConst)
 
 shipTriangle :: Vector -> Double -> Double -> [Point2D]
-shipTriangle (vx, vy) angle size =
-  let nose = noseAngle (vx, vy) angle
+shipTriangle speed@(Vector (vx, vy)) angle size =
+  let nose = noseAngle speed angle
       angles = [nose, nose + pi - triangleSpread, nose + pi + triangleSpread]
   in map (\a -> (cos a * size, sin a * size)) angles
 
@@ -70,10 +70,10 @@ createGroups attr =
         Running -> [planetGroup, bulletsGroup, debrisGroup, explosionsGroup, spaceships1, spaceships2] where
             n = attr^.nShips
             spaceships1 = objectGroup (head spaceshipManagerNames) $
-                          map (\i -> createSpaceship 0 i (Color 0.0 1.0 0.0) (width / 2 + width / 3 + 10 * fromIntegral i, height / 2))
+                          map (\i -> createSpaceship 0 i (Color 0.0 1.0 0.0) (Point (width / 2 + width / 3 + 10 * fromIntegral i, height / 2)))
                           [1..n]
             spaceships2 = objectGroup (spaceshipManagerNames !! 1) $
-                          map (\i -> createSpaceship 1 i (Color 0.0 0.0 1.0) (width / 2 - width / 3 - 10 * fromIntegral i, height /2 + 30))
+                          map (\i -> createSpaceship 1 i (Color 0.0 0.0 1.0) (Point (width / 2 - width / 3 - 10 * fromIntegral i, height /2 + 30)))
                           [1..n]
             debrisGroup = objectGroup debrisManagerName []
             explosionsGroup = objectGroup explosionsManagerName []
@@ -90,7 +90,7 @@ playerHasShipsInBound playerId = do
     manager <- findObjectManager (spaceshipManagerNames !! playerId)
     let c o = do
                 p <- getObjectPosition o
-                return $ isInBound p
+                return $ isInBound $ Point p
     shipsInBound <- filterM c $ getObjectManagerObjects manager
     return (not $ null shipsInBound)
 
@@ -109,7 +109,7 @@ accelerateShip :: Double -> GameObject ObjectAttributes -> SGame()
 accelerateShip speedDiff ship = do
     ShipAttributes angle ownerId _ <- getObjectAttribute ship
     (vx, vy) <- getObjectSpeed ship
-    let nangle = noseAngle (vx, vy) angle
+    let nangle = noseAngle (Vector (vx, vy)) angle
     let (dvx, dvy) = (cos nangle * speedDiff, sin nangle * speedDiff)
     setObjectSpeed (vx + dvx, vy + dvy) ship
 
@@ -146,8 +146,8 @@ getCurrentShip playerId = do
     return $ ships !! shipId
 
 isInBound :: Point -> Bool
-isInBound (px, py) = px >= -triangleRadius && px <= width + triangleRadius &&
-                     py >= -triangleRadius && py <= height + triangleRadius
+isInBound (Point (px, py)) = px >= -triangleRadius && px <= width + triangleRadius &&
+                             py >= -triangleRadius && py <= height + triangleRadius
 
 switchToNextShip :: Int -> Int -> SGame ()
 switchToNextShip d playerId = do
@@ -162,7 +162,7 @@ switchToNextShip d playerId = do
             currentShipId <- getCurrentShipIndex playerId
             manager <- findObjectManager $ spaceshipManagerNames !! playerId
             p <- getObjectPosition $ getObjectManagerObjects manager !! currentShipId
-            return $ isInBound p
+            return $ isInBound $ Point p
 
 endGame :: [Int] -> SGame ()
 endGame winnerIds = do
@@ -171,7 +171,7 @@ endGame winnerIds = do
     setObjectManagers $ createGroups a
     setGameAttribute a
 
-printLines :: [String] -> BitmapFont -> Double -> Point -> Color -> SGame ()
+printLines :: [String] -> BitmapFont -> Double -> (Double, Double) -> Color -> SGame ()
 printLines xs font lineHeight (px, py) (Color r g b) =
     forM_ (zip (if lineHeight > 0 then xs else reverse xs) [0..]) $ \(l, n) ->
         printOnScreen l font (px, py - lineHeight * n) r g b
