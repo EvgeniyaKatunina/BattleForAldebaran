@@ -3,11 +3,10 @@
 module Main where
 
 import Graphics.UI.Fungen (funInit, WindowConfig, RefreshType(Timer))
-import GameParameters
+import GameParameters (width, height, frameTime)
 import GameTypes
-import GameLogic
-import GameUtils
-import GameWrapper
+import GameUtils (gameMap, initialAttrs, createGroups)
+import GameWrapper (input, gameCycle)
 import GameStrings
 
 winConfig :: WindowConfig
