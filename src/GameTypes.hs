@@ -2,7 +2,7 @@
 
 module GameTypes where
 
-import Graphics.UI.Fungen
+import Graphics.UI.Fungen (IOGame)
 import Control.Lens
 
 data Color = Color

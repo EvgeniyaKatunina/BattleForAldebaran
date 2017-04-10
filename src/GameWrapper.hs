@@ -2,11 +2,13 @@
 
 module GameWrapper where
 
-import Control.Lens
+import Control.Lens ((.~), (^.))
 import GameTypes
 import GameStrings
 import GameParameters
-import GameUtils
+import GameUtils (createGroups, endGame, getCurrentShip,
+                   whenPlayerHasShips, whenRunningGame, rotateShip, accelerateShip,
+                   printLines, switchToNextShip)
 import Graphics.UI.Fungen.Objects
 import Graphics.UI.Fungen hiding (when)
 import GameLogic (makeShot, gameIteration)

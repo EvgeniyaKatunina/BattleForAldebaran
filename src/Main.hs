@@ -2,14 +2,13 @@
 
 module Main where
 
-import Graphics.UI.Fungen hiding (when)
+import Graphics.UI.Fungen (funInit, WindowConfig, RefreshType(Timer))
 import GameParameters
 import GameTypes
 import GameLogic
 import GameUtils
 import GameWrapper
 import GameStrings
-import Data.List
 
 winConfig :: WindowConfig
 winConfig = ((100, 80), (fromIntegral $ round width, fromIntegral $ round height), gameName)

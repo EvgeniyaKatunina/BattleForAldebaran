@@ -2,12 +2,12 @@
 
 module GameUtils where
 
-import Control.Lens
+import Control.Lens ((.~), (^.), (%~), ix, element, (&), singular)
 import GameTypes
 import Geometry
 import GameParameters
-import Control.Monad
-import Control.Monad.Loops
+import Control.Monad (forM_, forM, when, filterM)
+import Control.Monad.Loops (untilM_)
 import Graphics.UI.Fungen.Objects
 import Graphics.Rendering.OpenGL (GLdouble)
 import Graphics.UI.Fungen hiding (when)

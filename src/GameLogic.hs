@@ -2,16 +2,18 @@
 
 module GameLogic where
 
-import Control.Lens
-import Data.List
+import Control.Lens ((.~), (^.))
+import Data.List (elemIndex)
 import GameTypes
-import GameUtils
+import GameUtils (spaceshipManagerNames, playerHasShipsInBound, getCurrentShipIndex,
+                   setCurrentShipIndex, getCurrentShip, switchToNextShip, debrisManagerName,
+                   endGame, bulletsManagerName, nextBulletId, explosionsManagerName, shipPoly,
+                   whenRunningGame, whenPlayerHasShips, playerColors, shotColors, replaceObjectGroup)
 import GameStrings
 import GameParameters
 import Geometry
 import Physics
-import Control.Monad
-import Control.Monad.Loops
+import Control.Monad (forM_, forM, when, filterM)
 import Graphics.UI.Fungen hiding (when)
 
 -- |Performs a shot if the recharging time is already spent and sets a new counter for this time,
