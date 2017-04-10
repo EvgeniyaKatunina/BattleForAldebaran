@@ -9,7 +9,9 @@ A retro-style game implemented in Haskell with FunGEn
 
 You can download a Windows binary distribution from the [releases page](https://github.com/EvgeniyaKatunina/BattleForAldebaran/releases).
 
-The game is built with Cabal, use `cabal build` or `cabal run` after installing the required packages.
+Build with Cabal: use `cabal build` or `cabal run` after installing the required packages.
+
+Build with Stack: use `stack install` and then `game`.
 
 You can play around with the game parameters, changing them in [`GameParameters.hs`](https://github.com/EvgeniyaKatunina/BattleForAldebaran/blob/master/src/GameParameters.hs).
 
@@ -18,11 +20,11 @@ You can play around with the game parameters, changing them in [`GameParameters.
 The gameplay is quite straightforward: you control a starfleet of several ships (one at a time) and your goal is to destroy all enemy ships. 
 What complicates the matter is that the ships and the gunshots and everyhing moves in the orbits.
 
-Controls for Player 1: Left/Right - rotate ship, Up - accelerate, Down - shoot, . - next ship, ',' - previous ship.
+Controls for Player 1: `Left`/`Right` - rotate ship, `Up` - accelerate, `Down` - shoot, `.` - next ship, `,` - previous ship.
 
-Controls for Player 2: A/D - rotate ship, W - accelerate, S - shoot, Q - next ship, E - previous ship.
+Controls for Player 2: `A`/`D` - rotate ship, `W` - accelerate, `S` - shoot, `Q` - next ship, `E` - previous ship.
 
-SPACE to start game and F2 to exit game.
+`SPACE` to start game and `F2` to exit game.
 
 # Acknowledgements
 

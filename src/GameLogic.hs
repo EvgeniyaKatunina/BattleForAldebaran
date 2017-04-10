@@ -153,31 +153,31 @@ handleHits = do
         (bvx, bvy) <- getObjectSpeed bullet
         attr <- getObjectAttribute bullet
         let check (targetManager, playerId) = do
-            let isPlayer = playerId >= 0
-            shipManager <- findObjectManager targetManager
-            flip filterM (getObjectManagerObjects shipManager) (\o -> do
-                shipName <- getObjectName o
-                p <- getObjectPosition o
-                (vx, vy) <- getObjectSpeed o
-                let d = distance (bx, by) p
-                if d < triangleRadius &&
-                    (shipName /= (attr^.fromShipName) ||
-                    (_lifetime attr < shotLifetime - shotSafeTime)) then do
-                    if isPlayer then do
-                        currentShipName <- getObjectName =<< getCurrentShip playerId
-                        destroyObject o
-                        let impulse = addImpulse 0.8 0.2 (vx, vy) (bvx, bvy)
-                        createDebris playerId p impulse
-                        createExplosion playerId p impulse
-                        if shipName == currentShipName then switchToNextShip 1 playerId else do
-                            objs <- getObjectManagerObjects <$> findObjectManager targetManager
-                            names <- mapM getObjectName objs
-                            let Just i = elemIndex currentShipName names
-                            setCurrentShipIndex playerId i
-                        else destroyObject o
-                    return True
-                 else
-                    return False)
+                                                let isPlayer = playerId >= 0
+                                                shipManager <- findObjectManager targetManager
+                                                flip filterM (getObjectManagerObjects shipManager) (\o -> do
+                                                    shipName <- getObjectName o
+                                                    p <- getObjectPosition o
+                                                    (vx, vy) <- getObjectSpeed o
+                                                    let d = distance (bx, by) p
+                                                    if d < triangleRadius &&
+                                                        (shipName /= (attr^.fromShipName) ||
+                                                        (_lifetime attr < shotLifetime - shotSafeTime)) then do
+                                                        if isPlayer then do
+                                                            currentShipName <- getObjectName =<< getCurrentShip playerId
+                                                            destroyObject o
+                                                            let impulse = addImpulse 0.8 0.2 (vx, vy) (bvx, bvy)
+                                                            createDebris playerId p impulse
+                                                            createExplosion playerId p impulse
+                                                            if shipName == currentShipName then switchToNextShip 1 playerId else do
+                                                                objs <- getObjectManagerObjects <$> findObjectManager targetManager
+                                                                names <- mapM getObjectName objs
+                                                                let Just i = elemIndex currentShipName names
+                                                                setCurrentShipIndex playerId i
+                                                            else destroyObject o
+                                                        return True
+                                                     else
+                                                        return False)
         hasHit <- (not . null) . concat <$> mapM check ((debrisManagerName, -1):zip spaceshipManagerNames [0..])
         when hasHit $ destroyObject bullet
 
