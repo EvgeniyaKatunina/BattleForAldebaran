@@ -14,6 +14,8 @@ import Control.Monad
 import Control.Monad.Loops
 import Graphics.UI.Fungen hiding (when)
 
+-- |The 'makeShot' function performs a shot if the recharging time is already spent and sets a new counter for this time,
+-- otherwise it does nothing.
 makeShot :: Int ->  SGame ()
 makeShot playerId = whenRunningGame $ whenPlayerHasShips playerId $ do
     currentShip <- getCurrentShip playerId
@@ -33,6 +35,7 @@ makeShot playerId = whenRunningGame $ whenPlayerHasShips playerId $ do
         setObjectAttribute (shotCooldown .~ shotCooldownConst $ attr) currentShip
         addObjectsToGroup [bullet] bulletsManagerName
 
+-- |The 'updateShipPictures' function updates ships' coordinates and orientation.
 updateShipPictures :: SGame ()
 updateShipPictures = do
     managers <- getObjectManagers
@@ -49,12 +52,15 @@ updateShipPictures = do
         return $ objectGroup managerName newObjects
     setObjectManagers $ foldr (\a b -> replaceObjectGroup (getObjectManagerName a) a b) managers newManagers
 
+-- |The 'performGravity' function applies the 'handleGravity' function for each spaceship.
 performGravity :: SGame ()
 performGravity = forM_ (bulletsManagerName:debrisManagerName:spaceshipManagerNames) $ \managerName -> do
     manager <- findObjectManager managerName
     let ships = getObjectManagerObjects manager
     forM_ ships handleGravity
 
+-- |The 'handleGravity' function makes ship move accordingly to the low F = G*m1*m2/r^2. G*m1*m2 is not really
+-- calculated, the constant 'gravity' from the 'GameParameters' module can be tuned instead.
 handleGravity :: GameObject ObjectAttributes -> SGame ()
 handleGravity object = do
     planet <- findObject "planet" "planetGroup"
@@ -66,6 +72,7 @@ handleGravity object = do
     let acceleration = accelerationValue r *** ort (px, py) (sx, sy)
     setObjectSpeed ((vx , vy) +++ acceleration) object
 
+-- |The 'performPlanetCollision' function makes the ship collided with the planet disappear from the game.
 performPlanetCollision :: SGame ()
 performPlanetCollision = do
     planet <- findObject "planet" "planetGroup"
@@ -78,6 +85,7 @@ performPlanetCollision = do
             let r = distance (px, py) (x, y)
             when (r < planetRadius) $ destroyObject ship
 
+-- |The 'handleCooldowns' function decrements the time which is needed to make the next shot possible.
 handleCooldowns :: SGame ()
 handleCooldowns =
     forM_ spaceshipManagerNames $ \n -> do
@@ -86,6 +94,8 @@ handleCooldowns =
             attr <- getObjectAttribute ship
             setObjectAttribute (attr { _shotCooldown = _shotCooldown attr - 1 }) ship
 
+-- |The 'handleLifetimes' function provides destroying of the bullets, debris and explosions after '_lifetime' is spent.
+-- The function decrements the '_lifetime' for each object and then destroys objects with the non-positive '_lifetime'.
 handleLifetimes :: SGame ()
 handleLifetimes = forM_ [bulletsManagerName, debrisManagerName, explosionsManagerName] $ \managerName -> do
     manager <- findObjectManager managerName
@@ -95,6 +105,7 @@ handleLifetimes = forM_ [bulletsManagerName, debrisManagerName, explosionsManage
         if l < 0 then destroyObject bullet else
             setObjectAttribute (lifetime .~ l $ attr) bullet
 
+-- |The 'createDebris' function makes debris appear on the screen when the ship is hit by bullet.
 createDebris :: Int -> Point -> Vector -> SGame ()
 createDebris playerId (px, py) (vx, vy) = do
     nDebris <- randomInt debrisPiecesNumber
@@ -114,6 +125,7 @@ createDebris playerId (px, py) (vx, vy) = do
                                 False pos speed (BulletAttributes time "")
     addObjectsToGroup objects debrisManagerName
 
+-- |The 'createExplosion' function makes explosion happen when the ship is hit by bullet.
 createExplosion :: Int -> Point -> Vector -> SGame ()
 createExplosion playerId p (vx, vy) = do
     manager <- findObjectManager explosionsManagerName
@@ -130,6 +142,9 @@ createExplosion playerId p (vx, vy) = do
                                         False p (vx + dvx, vy + dvy) (BulletAttributes explosionTime "")
     addObjectsToGroup objects debrisManagerName
 
+-- |The 'handleHits' function does all of the stuff which must happen after the spaceship is hit. It switches the
+-- player' selected ship to the next one, destroys the ship object and calls 'createExplosion', 'createDebris' functions.
+-- It also destroys the bullet if there was a hit.
 handleHits :: SGame ()
 handleHits = do
     bulletManager <- findObjectManager bulletsManagerName
@@ -166,12 +181,16 @@ handleHits = do
         hasHit <- (not . null) . concat <$> mapM check ((debrisManagerName, -1):zip spaceshipManagerNames [0..])
         when hasHit $ destroyObject bullet
 
+-- |The 'checkEndGame' function checks the condition: are there any ships of the player on the screen now, if not the
+-- player lost game or there is a draw if the second player also does not have ships on the screen. It calls the 'endGame'
+-- function if needed and passes winner/winners' names.
 checkEndGame :: SGame ()
 checkEndGame = do
      let nameIds = zip spaceshipManagerNames [0..]
      winners <- filterM (\(_, i) -> playerHasShipsInBound i) nameIds
      when (length winners < length nameIds) $ endGame (map snd winners)
 
+-- |The 'gameIteration' function calls all of the functions above one-by-one to maintain the right state of the game.
 gameIteration :: SGame ()
 gameIteration = do
     performGravity
