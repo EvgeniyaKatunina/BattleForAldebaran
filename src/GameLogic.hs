@@ -105,7 +105,9 @@ handleLifetimes = forM_ [bulletsManagerName, debrisManagerName, explosionsManage
         if l < 0 then destroyObject bullet else
             setObjectAttribute (lifetime .~ l $ attr) bullet
 
--- |The 'createDebris' function makes debris appear on the screen when the ship is hit by bullet.
+-- |The 'createDebris' function makes debris appear on the screen when the ship is hit by bullet. The Int argument is
+-- for the player which spaceship was hit, Point, Vector arguments determine where and with which speed the debris must
+-- appear.
 createDebris :: Int -> Point -> Vector -> SGame ()
 createDebris playerId (px, py) (vx, vy) = do
     nDebris <- randomInt debrisPiecesNumber
@@ -125,7 +127,9 @@ createDebris playerId (px, py) (vx, vy) = do
                                 False pos speed (BulletAttributes time "")
     addObjectsToGroup objects debrisManagerName
 
--- |The 'createExplosion' function makes explosion happen when the ship is hit by bullet.
+-- |The 'createExplosion' function makes explosion happen when the ship is hit by bullet. The Int argument is
+-- for the player which spaceship was hit, Point, Vector arguments determine where and with which speed the debris must
+-- appear.
 createExplosion :: Int -> Point -> Vector -> SGame ()
 createExplosion playerId p (vx, vy) = do
     manager <- findObjectManager explosionsManagerName
